@@ -4,7 +4,8 @@ WORKDIR /app
 # Build tools only for the rare case where no prebuilt SQLite binary matches.
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-RUN npm ci
+# --ignore-scripts: the package's prepare script builds from src, which is not copied yet; rebuild then runs the native installs
+RUN npm ci --ignore-scripts && npm rebuild
 COPY tsconfig.json tsconfig.build.json ./
 COPY scripts ./scripts
 COPY src ./src
