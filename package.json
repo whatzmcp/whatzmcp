@@ -1,6 +1,6 @@
 {
   "name": "whatzmcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Open source WhatsApp MCP server. Connect your own WhatsApp account to Claude and other AI assistants. Runs on your machine.",
   "type": "module",
   "license": "MIT",

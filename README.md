@@ -24,9 +24,9 @@ You need Node.js 20 or newer and a phone with WhatsApp.
 
 2. Add the server to your MCP client (config blocks below) and restart the client.
 
-3. Ask your assistant to run `get_whatsapp_status`. It should say `connected`.
+3. Ask your assistant to run `get_whatsapp_status` with your number as `phoneNumber` (for example `+14155550123`). It should say `connected`.
 
-You can also skip step 1: start your client with whatzmcp configured and ask it to call `connect_whatsapp`. It returns the QR code as an image right in the chat.
+You can also skip step 1: start your client with whatzmcp configured and ask it to call `connect_whatsapp` with your number as `phone_number`. It returns the QR code as an image right in the chat, or an 8 character pairing code with `link_method: "pairing_code"`.
 
 ## Configure your MCP client
 
@@ -122,21 +122,21 @@ The `/data` volume keeps the session, the message database and `config.json`.
 
 | Tool | What it does |
 | --- | --- |
-| `get_whatsapp_status` | Connection status, your number, today's sends and caps, warm-up day |
-| `connect_whatsapp` | Start linking: returns a QR code image, or an 8 character pairing code with `method: "code"` and `phone_number` |
-| `get_whatsapp_qr` | The current QR code as an image, with how many seconds it stays valid |
-| `disconnect_whatsapp` | Unlink this device and delete the saved session |
-| `list_accounts` | The one account on this server (`local`) |
+| `get_whatsapp_status` | Connection status for `phoneNumber`, whether a QR code is waiting, last activity, today's sends and caps, warm-up day |
+| `connect_whatsapp` | Start linking `phone_number` (required, E.164): returns a QR code image, or an 8 character pairing code with `link_method: "pairing_code"`. `force_new: true` logs out and starts fresh |
+| `get_whatsapp_qr` | The current QR code for `phoneNumber` as an image and as text, with when it expires |
+| `disconnect_whatsapp` | Unlink `phoneNumber` from this device and delete the saved session |
+| `list_accounts` | The one account on this server (`local`) and the channel it serves |
 | `list_chats` | Chats, most recent first, filtered by `query` and `type` (user, group, channel) |
 | `list_messages` | Messages newest first, for all chats or one `chat_id`, paged with `before` |
 | `get_message` | One message by id |
 | `search_messages` | Full text search over your stored messages |
 | `wait_for_messages` | Wait up to 55 seconds for new inbound messages; pass the returned `cursor` to the next call |
-| `send_message` | Send one message to one recipient (`to.phone` or `to.contact_id`), with optional media (`media_url` over https, or a local `media_path`) and `reply_to` |
+| `send_message` | Send one message to one recipient (`to.phone` or `to.contact_id`). `text` is required and becomes the caption with optional media (`media_url` over https, or a local `media_path`); `reply_to` quotes a message |
 | `mark_read` | Send read receipts for a chat and clear its unread count |
-| `get_usage` | Today's sends, new contacts, caps and warm-up day |
+| `get_usage` | Today's sends, new contacts, caps, warm-up day and whether the account is active or suspended |
 
-Messages come back as JSON with `id`, `chat_id`, `direction`, `text`, `timestamp`, `status` and a `contact` (id, phone, name). A refused call returns JSON with an `error_code` (for example `new_contact_cap` or `daily_send_cap`), a readable `error`, and `retry_after_s` when waiting helps. The tool names and fields follow door-contract 1.0 (`contract/door-contract.json`) and stay stable within a major version.
+Messages come back as JSON with `id`, `chat_id`, `direction`, `text`, `timestamp`, `status` and a `contact` (id, phone, name). A refused call returns JSON with an `error_code` (for example `new_contact_cap` or `daily_send_cap`), a readable `error`, and `retry_after_s` when waiting helps. The four connection tools (`connect_whatsapp`, `get_whatsapp_qr`, `get_whatsapp_status`, `disconnect_whatsapp`) answer with `success: true` and `phone_number`, and refuse with `success: false` and an HTTP status number as `error_code` (for example 404 when `phoneNumber` is not the number on this server). The tool names and fields follow door-contract 1.0 (`contract/door-contract.json`) and stay stable within a major version.
 
 ## Safety limits
 

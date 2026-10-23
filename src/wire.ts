@@ -12,9 +12,9 @@ export interface WireMessage {
   channel: string;
   direction: 'inbound' | 'outbound';
   text: string;
-  media?: { url?: string; content_type: string };
+  media: { url?: string; content_type: string } | null;
   status: string;
-  error?: { code: string; message: string };
+  error: { code: number; message: string } | null;
   timestamp: string;
   contact: { id: string; phone?: string; name?: string };
   chat_id: string;
@@ -38,6 +38,7 @@ export interface WireAccount {
 
 export interface WireChat {
   chat_id: string;
+  channel: string;
   name: string | null;
   type: 'user' | 'group' | 'channel';
   unread_count: number;
@@ -64,8 +65,10 @@ export function toWireMessage(row: MessageRow, store: Store, ownJid: string | nu
     channel: CHANNEL,
     direction,
     text: row.text ?? '',
+    media: null,
     status: row.status ?? (row.from_me ? 'sent' : 'received'),
     timestamp: iso(row.ts),
+    error: null,
     contact: { id: contactId },
     chat_id: row.chat_jid,
   };
@@ -73,13 +76,14 @@ export function toWireMessage(row: MessageRow, store: Store, ownJid: string | nu
   if (phone) msg.contact.phone = phone;
   if (name) msg.contact.name = name;
   if (row.media_type) msg.media = { content_type: row.mimetype ?? row.media_type };
-  if (row.status === 'failed') msg.error = { code: 'send_failed', message: 'WhatsApp did not accept this message.' };
+  if (row.status === 'failed') msg.error = { code: 0, message: 'WhatsApp did not accept this message.' };
   return msg;
 }
 
 export function toWireChat(row: ChatRow): WireChat {
   return {
     chat_id: row.jid,
+    channel: CHANNEL,
     name: row.name,
     type: row.is_group ? 'group' : row.jid.endsWith('@newsletter') ? 'channel' : 'user',
     unread_count: row.unread_count,
@@ -101,4 +105,56 @@ export class ToolError extends Error {
     if (this.retryAfterS !== undefined) e.retry_after_s = this.retryAfterS;
     return e;
   }
+}
+
+/** The refusal of a lifecycle tool (connect, QR, status, disconnect): the hosted connection API shape. */
+export interface LifecycleRefusal {
+  success: false;
+  error_code: number;
+  error: string;
+  retry_after_s?: number;
+}
+
+/** A lifecycle refusal with an HTTP status as its code. */
+export class LifecycleError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly retryAfterS?: number,
+  ) {
+    super(message);
+  }
+}
+
+/** HTTP status for a shared error code, when a lifecycle tool hits one. */
+function httpStatusFor(code: string): number {
+  if (code.startsWith('invalid_')) return 400;
+  switch (code) {
+    case 'account_suspended':
+      return 403;
+    case 'no_connected_account':
+    case 'account_not_found':
+      return 404;
+    case 'code_required':
+    case 'password_required':
+      return 409;
+    case 'rate_limited':
+      return 429;
+    default:
+      return 502;
+  }
+}
+
+export function toLifecycleRefusal(err: unknown): LifecycleRefusal {
+  let r: LifecycleRefusal;
+  if (err instanceof LifecycleError) {
+    r = { success: false, error_code: err.status, error: err.message };
+    if (err.retryAfterS !== undefined) r.retry_after_s = err.retryAfterS;
+  } else if (err instanceof ToolError) {
+    r = { success: false, error_code: httpStatusFor(err.code), error: err.message };
+    if (err.retryAfterS !== undefined) r.retry_after_s = err.retryAfterS;
+  } else {
+    r = { success: false, error_code: 502, error: (err as Error)?.message ?? String(err) };
+  }
+  return r;
 }

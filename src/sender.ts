@@ -20,6 +20,15 @@ export interface SendRequest {
   media_url?: string;
   media_path?: string;
   reply_to?: string;
+  /** The person agreed to hear from you. Accepted and logged; it does not lift any limit here. */
+  opt_in?: boolean;
+}
+
+export interface SendResult {
+  message_id: string;
+  status: 'sent';
+  /** True when the message quotes reply_to. */
+  reply_to_applied: boolean;
 }
 
 export interface SenderDeps {
@@ -29,6 +38,7 @@ export interface SenderDeps {
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+  logger?: { info: (obj: object, msg?: string) => void };
 }
 
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -68,7 +78,7 @@ export class Sender {
     this.random = deps.random ?? Math.random;
   }
 
-  send(req: SendRequest): Promise<{ message_id: string; status: 'sent' }> {
+  send(req: SendRequest): Promise<SendResult> {
     const run = this.chain.then(() => this.sendNow(req));
     this.chain = run.catch(() => undefined);
     return run;
@@ -104,13 +114,14 @@ export class Sender {
     return store.canonicalJid(hit.jid).jid;
   }
 
-  private async sendNow(req: SendRequest): Promise<{ message_id: string; status: 'sent' }> {
+  private async sendNow(req: SendRequest): Promise<SendResult> {
     const { store, conn } = this.deps;
     const config = this.deps.config();
-    const text = req.text ?? '';
-    if (text.length > 4096) throw new ToolError('invalid_recipient', 'text is longer than 4096 characters.');
-    if (req.media_url && req.media_path) throw new ToolError('media_unavailable', 'Pass media_url or media_path, not both.');
-    if (!text.trim() && !req.media_url && !req.media_path) throw new ToolError('invalid_recipient', 'Nothing to send: pass text, media_url or media_path.');
+    if (typeof req.text !== 'string' || req.text.length === 0) throw new ToolError('invalid_text', 'text is required. With media it is the caption.');
+    const text = req.text;
+    if (text.length > 4096) throw new ToolError('invalid_text', 'text is longer than 4096 characters.');
+    if (req.media_url && req.media_path) throw new ToolError('invalid_request', 'Pass media_url or media_path, not both.');
+    if (!text.trim() && !req.media_url && !req.media_path) throw new ToolError('invalid_text', 'text is empty.');
 
     // Validate the recipient shape before anything that needs the connection.
     parseRecipient(req.to);
@@ -132,9 +143,9 @@ export class Sender {
       try {
         u = new URL(req.media_url);
       } catch {
-        throw new ToolError('media_unavailable', 'media_url is not a valid URL.');
+        throw new ToolError('invalid_media_url', 'media_url is not a valid URL.');
       }
-      if (u.protocol !== 'https:') throw new ToolError('media_unavailable', 'media_url must start with https://');
+      if (u.protocol !== 'https:') throw new ToolError('invalid_media_url', 'media_url must start with https://');
       media = { url: u.toString() };
       mediaInfo = detectMedia(u.toString());
     } else if (req.media_path) {
@@ -157,11 +168,19 @@ export class Sender {
     let quoted: unknown;
     if (req.reply_to) {
       const row = store.getMessage(req.reply_to);
-      if (!row || !row.raw) throw new ToolError('message_not_found', `No stored message with id ${req.reply_to} to reply to.`);
-      quoted = JSON.parse(row.raw, BufferJSON.reviver);
+      if (!row) throw new ToolError('message_not_found', `No stored message with id ${req.reply_to} to reply to.`);
+      // A stored message without its original payload cannot be quoted: it is sent without the quote.
+      if (row.raw) {
+        try {
+          quoted = JSON.parse(row.raw, BufferJSON.reviver);
+        } catch {
+          quoted = undefined;
+        }
+      }
     }
 
     const chatJid = await this.resolveChat(req.to);
+    if (req.opt_in) this.deps.logger?.info({ chat: chatJid, opt_in: true }, 'send_message with opt_in');
     const isNew = store.isNewContact(chatJid);
     const now = this.now();
     const u = this.usage();
@@ -223,6 +242,6 @@ export class Sender {
         raw: sent ? JSON.stringify({ key: sent.key, message: sent.message }, BufferJSON.replacer) : null,
       });
     }
-    return { message_id: messageId, status: 'sent' };
+    return { message_id: messageId, status: 'sent', reply_to_applied: quoted !== undefined };
   }
 }

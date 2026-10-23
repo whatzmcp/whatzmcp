@@ -3,7 +3,7 @@
   "name": "io.github.whatzmcp/whatzmcp",
   "title": "whatzmcp",
   "description": "Self-hosted WhatsApp MCP server: read, search and send messages from your own WhatsApp account.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "websiteUrl": "https://whatzmcp.com",
   "repository": {
     "url": "https://github.com/whatzmcp/whatzmcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "whatzmcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "npx",
       "transport": { "type": "stdio" },
       "environmentVariables": [
@@ -26,7 +26,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/whatzmcp/whatzmcp:0.1.0",
+      "identifier": "ghcr.io/whatzmcp/whatzmcp:0.1.1",
       "runtimeHint": "docker",
       "transport": { "type": "stdio" },
       "runtimeArguments": [

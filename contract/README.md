@@ -13,6 +13,10 @@ What it holds:
 
 Fields marked `local_only` are accepted by self-hosted servers only. An agent that never sends them works with every server.
 
+Fields marked `hosted_only` are accepted by self-hosted servers and ignored there.
+
+The connection tools (`connect_*`, `get_*_qr`, `get_*_status`, `submit_*`, `disconnect_*`) answer with `success: true` and `phone_number`, and refuse with `{success: false, error_code: <HTTP status as an integer>, error}`.
+
 Versioning:
 
 - Within a major version, a tool, field or error code is never renamed or removed.

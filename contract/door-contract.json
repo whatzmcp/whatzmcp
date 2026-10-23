@@ -5,7 +5,10 @@
     "Names are forever: a tool, field or error code is never renamed or removed within a major version. Additions are optional fields or new tools only.",
     "Every refusal is a tool result with isError true whose text is JSON {error_code, error, retry_after_s?}. Nothing is sent on a refusal and nothing is queued.",
     "to is one recipient object, never a list. No bulk tool exists.",
-    "Fields marked local_only are accepted by self-hosted servers only; an agent that never sends them works everywhere."
+    "Fields marked local_only are accepted by self-hosted servers only; an agent that never sends them works everywhere.",
+    "Pre-release correction 2026-10-23: where a tool was live on the hosted API before the contract was written, its live hosted schema is the contract (field names, required fields, enums, limits, output fields). Additions marked hosted_only are accepted by self-hosted servers and ignored there.",
+    "Lifecycle tools (connect_*, get_*_qr, get_*_status, submit_*, disconnect_*) keep the hosted connection API shape: success results carry success: true and phone_number, and a refusal is {success: false, error_code: <HTTP status as an integer>, error}. Every other tool refuses with a WireError (string error_code).",
+    "An unknown chat_id used as a filter (list_messages, wait_for_messages, search_messages) returns an empty list; a malformed one is invalid_chat_id. mark_read on an unknown chat is contact_not_found."
   ],
   "objects": {
     "WireMessage": {
@@ -29,11 +32,7 @@
         },
         "channel": {
           "type": "string",
-          "enum": [
-            "whatsapp_web",
-            "telegram",
-            "linkedin"
-          ]
+          "description": "whatsapp_web, telegram or linkedin on the doors; the hosted API may name other channels."
         },
         "direction": {
           "type": "string",
@@ -46,7 +45,10 @@
           "type": "string"
         },
         "media": {
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "url": {
               "type": "string"
@@ -63,10 +65,17 @@
           "type": "string"
         },
         "error": {
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "code": {
-              "type": "string"
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "Platform error number; self-hosted servers use 0 when the platform gives none."
             },
             "message": {
               "type": "string"
@@ -211,6 +220,10 @@
         },
         "retry_after_s": {
           "type": "integer"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Hosted only: a sub-reason on some codes (linkedin_gap, linkedin_claim_lost)."
         }
       }
     }
@@ -223,7 +236,7 @@
         "type": "object",
         "properties": {}
       },
-      "output": "{accounts: WireAccount[]}"
+      "output": "{accounts: WireAccount[], channels: [{channel, label, connect_kind, max_accounts}]}"
     },
     {
       "name": "send_message",
@@ -231,7 +244,8 @@
       "input": {
         "type": "object",
         "required": [
-          "to"
+          "to",
+          "text"
         ],
         "properties": {
           "account_id": {
@@ -243,12 +257,14 @@
           },
           "text": {
             "type": "string",
-            "maxLength": 4096
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "Message text, or the caption when media is attached. Required, up to 4096 characters."
           },
           "media_url": {
             "type": "string",
             "format": "uri",
-            "pattern": "^https://"
+            "description": "An https URL of an image, video, audio file or document to attach."
           },
           "reply_to": {
             "type": "string",
@@ -258,10 +274,14 @@
             "type": "string",
             "local_only": true,
             "description": "Absolute path to a local file."
+          },
+          "opt_in": {
+            "type": "boolean",
+            "description": "True only when this person agreed to hear from you. Hosted: lets a first message to a new contact go past the free new contact limit. Self-hosted servers accept it and log it."
           }
         }
       },
-      "output": "{message_id, status: \"queued\"|\"sent\"}"
+      "output": "{message_id, status: \"queued\" (hosted) | \"sent\" (self-hosted, already delivered to the platform), reply_to_applied}"
     },
     {
       "name": "get_message",
@@ -344,7 +364,7 @@
         "type": "object",
         "properties": {}
       },
-      "output": "{plan, day, sends, sends_cap, new_contacts, new_contacts_cap, ramp_day?, contract_version}"
+      "output": "{plan, day, sends, sends_cap, new_contacts, new_contacts_cap, status: \"active\"|\"suspended\", suspended_reason?, accounts_total, accounts_connected, accounts_cap, ramp_day? (self-hosted), contract_version}"
     },
     {
       "name": "list_chats",
@@ -356,7 +376,8 @@
             "type": "string"
           },
           "query": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 200
           },
           "limit": {
             "type": "integer",
@@ -374,7 +395,7 @@
           }
         }
       },
-      "output": "{chats: [{chat_id, name, type, unread_count, last_message_at}]}"
+      "output": "{chats: [{chat_id, channel, name, type, unread_count, last_message_at}]}"
     },
     {
       "name": "search_messages",
@@ -386,7 +407,9 @@
         ],
         "properties": {
           "query": {
-            "type": "string"
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
           },
           "account_id": {
             "type": "string"
@@ -421,7 +444,7 @@
           }
         }
       },
-      "output": "{marked: true}"
+      "output": "{marked: true, receipt_sent}"
     }
   ],
   "channels": {
@@ -445,50 +468,104 @@
       "tools": [
         {
           "name": "connect_whatsapp",
-          "description": "Start linking a WhatsApp account by QR code or pairing code.",
+          "description": "Start linking a WhatsApp account as a linked device, by QR code (default) or by pairing code.",
           "input": {
             "type": "object",
+            "required": [
+              "phone_number"
+            ],
             "properties": {
               "phone_number": {
-                "type": "string"
+                "type": "string",
+                "description": "The WhatsApp number to link, in E.164, for example +31612345678."
               },
-              "method": {
+              "link_method": {
                 "type": "string",
                 "enum": [
                   "qr",
-                  "code"
-                ]
+                  "pairing_code"
+                ],
+                "default": "qr"
+              },
+              "force_new": {
+                "type": "boolean",
+                "default": false,
+                "description": "Start a fresh link even when a session exists."
+              },
+              "import_contacts": {
+                "type": "boolean",
+                "default": false,
+                "hosted_only": true
+              },
+              "pause_ai_for_imported_contacts": {
+                "type": "boolean",
+                "default": true,
+                "hosted_only": true
+              },
+              "import_existing_chats": {
+                "type": "boolean",
+                "default": false,
+                "hosted_only": true
+              },
+              "mark_imported_contacts_as_private": {
+                "type": "boolean",
+                "default": false,
+                "hosted_only": true
               }
             }
           },
-          "output": "{account_id, status, qr_png_base64?, pairing_code?}"
+          "output": "{success: true, phone_number, status: \"qr_pending\" (\"connected\" self-hosted when already linked), session_id, connect_url? (hosted), connect_url_expires_at? (hosted), poll_qr_path? (hosted), poll_status_path? (hosted), qr_png_base64? (self-hosted), pairing_code? (self-hosted)}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "get_whatsapp_qr",
           "description": "Get the current pairing QR code as an image.",
           "input": {
             "type": "object",
-            "properties": {}
+            "required": [
+              "phoneNumber"
+            ],
+            "properties": {
+              "phoneNumber": {
+                "type": "string",
+                "description": "The WhatsApp number of the connection, in E.164 (the phone_number given to connect_whatsapp)."
+              }
+            }
           },
-          "output": "image content + {expires_in_s}"
+          "output": "{success: true, phone_number, status: \"qr_pending\", qr_code, qr_data_url, expires_at} (self-hosted also returns the QR as image content). A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "get_whatsapp_status",
           "description": "Get the WhatsApp account status.",
           "input": {
             "type": "object",
-            "properties": {}
+            "required": [
+              "phoneNumber"
+            ],
+            "properties": {
+              "phoneNumber": {
+                "type": "string",
+                "description": "The WhatsApp number of the connection, in E.164 (the phone_number given to connect_whatsapp)."
+              }
+            }
           },
-          "output": "WireAccount"
+          "output": "{success: true, phone_number, status: \"not_initialized\"|\"qr_pending\"|\"connecting\"|\"connected\"|\"open\"|\"disconnected\" (self-hosted adds \"restricted\"), has_qr, qr_expires_at, last_activity, message_count, proxy, live, limits? (self-hosted)}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "disconnect_whatsapp",
           "description": "Unlink the WhatsApp account.",
           "input": {
             "type": "object",
-            "properties": {}
+            "required": [
+              "phoneNumber"
+            ],
+            "properties": {
+              "phoneNumber": {
+                "type": "string",
+                "description": "The WhatsApp number of the connection, in E.164 (the phone_number given to connect_whatsapp)."
+              }
+            }
           },
-          "output": "{disconnected: true}"
+          "output": "{success: true, phone_number, status: \"removed\"|\"disconnected\"}. A refusal is {success: false, error_code: <HTTP status>, error}."
         }
       ]
     },
@@ -499,11 +576,8 @@
         "description": "Exactly one of these fields.",
         "properties": {
           "telegram_user_id": {
-            "type": [
-              "string",
-              "integer"
-            ],
-            "description": "Numeric Telegram user id of a user this account has seen."
+            "type": "string",
+            "description": "Numeric Telegram user id of a user this account has seen, as a string."
           },
           "telegram_username": {
             "type": "string",
@@ -528,16 +602,29 @@
           "input": {
             "type": "object",
             "required": [
-              "phone"
+              "phone_number"
             ],
             "properties": {
-              "phone": {
+              "phone_number": {
                 "type": "string",
                 "description": "Your phone number in international format, for example +31612345678."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "code",
+                  "qr"
+                ],
+                "default": "code",
+                "description": "code (default) or qr. Self-hosted servers support code only."
+              },
+              "force_new": {
+                "type": "boolean",
+                "description": "Start a fresh login even when a session exists."
               }
             }
           },
-          "output": "{account_id, status: \"code_required\"|\"connected\"}"
+          "output": "{success: true, phone_number, status: \"code_required\"|\"qr_required\"|\"initializing\" (\"connected\" self-hosted when already logged in), session_id, login_token? (hosted), qr_url? (hosted), connect_url? (hosted), connect_url_expires_at? (hosted)}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "submit_telegram_code",
@@ -545,15 +632,20 @@
           "input": {
             "type": "object",
             "required": [
+              "phoneNumber",
               "code"
             ],
             "properties": {
+              "phoneNumber": {
+                "type": "string",
+                "description": "The phone number given to connect_telegram."
+              },
               "code": {
                 "type": "string"
               }
             }
           },
-          "output": "{account_id, status: \"connected\"|\"password_required\", hint?}"
+          "output": "{success: true, phone_number, status: \"connected\"|\"password_required\", telegram_user_id, username, hint? (self-hosted)}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "submit_telegram_password",
@@ -561,33 +653,54 @@
           "input": {
             "type": "object",
             "required": [
+              "phoneNumber",
               "password"
             ],
             "properties": {
+              "phoneNumber": {
+                "type": "string",
+                "description": "The phone number given to connect_telegram."
+              },
               "password": {
                 "type": "string"
               }
             }
           },
-          "output": "{account_id, status: \"connected\"}"
+          "output": "{success: true, phone_number, status: \"connected\"|\"password_required\", telegram_user_id, username}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "get_telegram_status",
           "description": "The Telegram account: connection status, identifier and today's limits.",
           "input": {
             "type": "object",
-            "properties": {}
+            "required": [
+              "phoneNumber"
+            ],
+            "properties": {
+              "phoneNumber": {
+                "type": "string",
+                "description": "The phone number given to connect_telegram."
+              }
+            }
           },
-          "output": "WireAccount"
+          "output": "{success: true, phone_number, status: \"connected\"|\"code_required\"|\"password_required\"|\"initializing\"|\"disconnected\"|\"not_initialized\"|\"error\", telegram_user_id, live, limits? (self-hosted)}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "disconnect_telegram",
           "description": "Log out of Telegram and delete the saved session.",
           "input": {
             "type": "object",
-            "properties": {}
+            "required": [
+              "phoneNumber"
+            ],
+            "properties": {
+              "phoneNumber": {
+                "type": "string",
+                "description": "The phone number given to connect_telegram."
+              }
+            }
           },
-          "output": "{disconnected: true}"
+          "output": "{success: true, phone_number, status: \"removed\"}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "list_groups",
@@ -599,7 +712,8 @@
                 "type": "string"
               },
               "query": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               "limit": {
                 "type": "integer",
@@ -609,7 +723,7 @@
               }
             }
           },
-          "output": "{chats: [{chat_id, name, type, unread_count, last_message_at}]}"
+          "output": "{chats: [{chat_id, channel, name, type, unread_count, last_message_at}]}"
         },
         {
           "name": "list_channels",
@@ -621,7 +735,8 @@
                 "type": "string"
               },
               "query": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               "limit": {
                 "type": "integer",
@@ -631,7 +746,7 @@
               }
             }
           },
-          "output": "{chats: [{chat_id, name, type, unread_count, last_message_at}]}"
+          "output": "{chats: [{chat_id, channel, name, type, unread_count, last_message_at}]}"
         }
       ],
       "error_codes": {
@@ -642,7 +757,8 @@
         "rate_limited covers Telegram FLOOD_WAIT (retry_after_s is the wait) and PEER_FLOOD (sends to new contacts stop until local midnight).",
         "not_available_for_bots is returned in bot mode for calls Telegram does not allow bots to make.",
         "Self-hosted servers add bot mode through the CLI or TELEMCP_BOT_TOKEN, with no extra tool.",
-        "Message ids are <chat_id>:<telegram message id>."
+        "Message ids are <chat_id>:<telegram message id>.",
+        "In bot mode (self-hosted) there is no phone number: the lifecycle tools accept any phoneNumber value and report phone_number null."
       ]
     },
     "linkedin": {
@@ -833,10 +949,10 @@
     }
   },
   "error_codes": {
-    "no_connected_account": "Not paired, logged out, or the connection is down.",
+    "no_connected_account": "No account is connected (not paired, logged out, or the connection is down).",
     "account_suspended": "The platform refused the session (WhatsApp 403, Telegram ban). Sending is stopped.",
     "invalid_recipient": "The recipient is malformed, a list, or not on the platform.",
-    "contact_not_found": "No chat with that id is known.",
+    "contact_not_found": "No chat or contact with that id is known (mark_read, send_message to.contact_id).",
     "needs_inbound_first": "The recipient must write first.",
     "daily_send_cap": "Today's message cap is reached. retry_after_s points to the next local midnight on self-hosted.",
     "new_contact_cap": "Today's new contact cap is reached. retry_after_s points to the next local midnight on self-hosted.",
@@ -854,6 +970,26 @@
     "link_not_allowed": "A link in a connection note, or in a message to a person who has not written back in this thread. The text is refused, not edited.",
     "daily_invite_cap": "Today's connection request cap is reached. retry_after_s points to the next local midnight.",
     "daily_read_cap": "Today's profile view or search cap is reached. retry_after_s points to the next local midnight.",
-    "needs_connection_first": "A new LinkedIn thread can only be opened with a first degree connection."
+    "needs_connection_first": "A new LinkedIn thread can only be opened with a first degree connection.",
+    "account_not_found": "account_id is not one of your accounts.",
+    "invalid_request": "A field has the wrong type or value.",
+    "invalid_text": "text is missing or longer than 4096 characters.",
+    "invalid_media_url": "media_url is not an https URL.",
+    "invalid_reply_to": "reply_to is not a message id.",
+    "invalid_chat_id": "chat_id is malformed.",
+    "invalid_cursor": "cursor or before is not a cursor this server returned.",
+    "invalid_limit": "limit is out of range.",
+    "invalid_query": "query is missing, too short or too long.",
+    "invalid_type": "type is not user, group or channel.",
+    "invalid_timeout": "timeout_s is out of range.",
+    "invalid_direction": "direction is not inbound or outbound.",
+    "ambiguous_account": "Hosted only: several accounts are connected; pass account_id.",
+    "contact_opted_out": "Hosted only: the contact opted out.",
+    "contact_do_not_disturb": "Hosted only: the contact has do not disturb on.",
+    "contact_private": "Hosted only: the contact is marked private.",
+    "contact_account_mismatch": "Hosted only: contact_id belongs to another account.",
+    "contact_channel_mismatch": "Hosted only: contact_id is on another channel.",
+    "wait_concurrency": "Hosted only: too many wait_for_messages calls at once; retry_after_s.",
+    "internal_error": "Hosted only: an unexpected server error."
   }
 }

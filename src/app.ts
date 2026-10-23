@@ -71,7 +71,7 @@ export function openApp(opts: { onQr?: (qr: string) => void; lock?: boolean } = 
   const logger = createLogger();
   const store = new Store(paths.db);
   const conn = new Connection({ paths, store, logger, onQr: opts.onQr });
-  const sender = new Sender({ store, conn, config });
+  const sender = new Sender({ store, conn, config, logger });
   const ctx: ToolContext = { store, conn, sender, config };
   let closed = false;
   const shutdown = async () => {

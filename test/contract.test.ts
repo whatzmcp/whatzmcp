@@ -47,10 +47,37 @@ describe('door-contract 1.0', () => {
   });
 
   it('every error code the server can return is in the contract', () => {
-    const src = ['sender.ts', 'tools.ts', 'safety.ts']
+    const src = ['sender.ts', 'tools.ts', 'safety.ts', 'wire.ts']
       .map((f) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8'))
       .join('\n');
     const used = new Set([...src.matchAll(/(?:ToolError\(|error_code: )'([a-z_]+)'/g)].map((m) => m[1]));
     for (const code of used) expect(Object.keys(contract.error_codes), code).toContain(code);
+  });
+
+  it('lifecycle tools refuse with an integer HTTP status, shared tools with a string code', async () => {
+    const src = readFileSync(new URL('../src/tools.ts', import.meta.url), 'utf8');
+    const statuses = [...src.matchAll(/LifecycleError\((\d+)/g)].map((m) => Number(m[1]));
+    expect(statuses.length).toBeGreaterThan(0);
+    for (const s of statuses) expect([400, 403, 404, 409, 410, 429, 502, 503], String(s)).toContain(s);
+
+    const lifecycle = contract.channels.whatsapp_web.tools.map((t: { name: string }) => t.name).filter((n: string) => n !== 'connect_whatsapp');
+    for (const name of lifecycle) {
+      const r = await h.call(name, { phoneNumber: '+14155550199' });
+      expect(r.isError, name).toBe(true);
+      expect(r.data.success, name).toBe(false);
+      expect(Number.isInteger(r.data.error_code), name).toBe(true);
+      expect(typeof r.data.error, name).toBe('string');
+    }
+    const shared = await h.call('get_message', { id: 'nope' });
+    expect(shared.isError).toBe(true);
+    expect(typeof shared.data.error_code).toBe('string');
+    expect(shared.data.success).toBeUndefined();
+  });
+
+  it('WireMessage error.code is an integer', async () => {
+    h.store.ingestMessage({ id: 'CF1', chatJid: '14155550123@s.whatsapp.net', fromMe: true, ts: 1000, text: 'x', status: 'failed', live: true });
+    const m = await h.call('get_message', { id: 'CF1' });
+    expect(Number.isInteger(m.data.error.code)).toBe(true);
+    expect(m.data.media).toBeNull();
   });
 });

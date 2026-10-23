@@ -371,6 +371,12 @@ export class Store {
       .all(...args, opts.limit) as MessageRow[];
   }
 
+  /** How many messages are stored, and the newest timestamp (unix seconds) or null. */
+  messageStats(): { count: number; lastTs: number | null } {
+    const row = this.db.prepare('SELECT count(*) AS n, max(ts) AS t FROM messages').get() as { n: number; t: number | null };
+    return { count: row.n, lastTs: row.t ?? null };
+  }
+
   /** Highest seq stored so far (0 when empty). */
   maxSeq(): number {
     const row = this.db.prepare('SELECT max(seq) AS m FROM messages').get() as { m: number | null };
