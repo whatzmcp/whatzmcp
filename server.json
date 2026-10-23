@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.whatzmcp/whatzmcp",
+  "title": "whatzmcp",
+  "description": "Self-hosted WhatsApp MCP server: read, search and send messages from your own WhatsApp account.",
+  "version": "0.1.0",
+  "websiteUrl": "https://whatzmcp.com",
+  "repository": {
+    "url": "https://github.com/whatzmcp/whatzmcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "whatzmcp",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "WHATZMCP_HOME",
+          "description": "Data directory for the WhatsApp session, the message database and config.json. Defaults to ~/.whatzmcp.",
+          "isRequired": false
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/whatzmcp/whatzmcp:0.1.0",
+      "runtimeHint": "docker",
+      "transport": { "type": "stdio" },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-v",
+          "description": "Volume that keeps the WhatsApp session and messages between runs.",
+          "value": "whatzmcp-data:/data",
+          "isRequired": true
+        }
+      ]
+    }
+  ]
+}

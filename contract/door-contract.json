@@ -1,0 +1,859 @@
+{
+  "contract": "door-contract",
+  "version": "1.0",
+  "rules": [
+    "Names are forever: a tool, field or error code is never renamed or removed within a major version. Additions are optional fields or new tools only.",
+    "Every refusal is a tool result with isError true whose text is JSON {error_code, error, retry_after_s?}. Nothing is sent on a refusal and nothing is queued.",
+    "to is one recipient object, never a list. No bulk tool exists.",
+    "Fields marked local_only are accepted by self-hosted servers only; an agent that never sends them works everywhere."
+  ],
+  "objects": {
+    "WireMessage": {
+      "type": "object",
+      "required": [
+        "id",
+        "account_id",
+        "channel",
+        "direction",
+        "text",
+        "status",
+        "timestamp",
+        "contact"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "whatsapp_web",
+            "telegram",
+            "linkedin"
+          ]
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "inbound",
+            "outbound"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "media": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "content_type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "content_type"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "contact": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "telegram_user_id": {
+              "type": "string"
+            },
+            "telegram_username": {
+              "type": "string"
+            },
+            "linkedin_username": {
+              "type": "string",
+              "description": "Public id from the profile URL."
+            },
+            "profile_url": {
+              "type": "string"
+            }
+          }
+        },
+        "chat_id": {
+          "type": "string"
+        }
+      }
+    },
+    "WireAccount": {
+      "type": "object",
+      "required": [
+        "id",
+        "channel",
+        "connect_kind",
+        "identifier",
+        "status",
+        "connected_at",
+        "limits"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "whatsapp_web",
+            "telegram",
+            "linkedin"
+          ]
+        },
+        "connect_kind": {
+          "type": "string"
+        },
+        "identifier": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "connecting",
+            "disconnected",
+            "restricted"
+          ]
+        },
+        "connected_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "limits": {
+          "type": "object",
+          "required": [
+            "sends_today",
+            "sends_cap",
+            "new_contacts_today",
+            "new_contacts_cap",
+            "ramp_day"
+          ],
+          "properties": {
+            "sends_today": {
+              "type": "integer"
+            },
+            "sends_cap": {
+              "type": "integer"
+            },
+            "new_contacts_today": {
+              "type": "integer"
+            },
+            "new_contacts_cap": {
+              "type": "integer"
+            },
+            "ramp_day": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "WireError": {
+      "type": "object",
+      "required": [
+        "error_code",
+        "error"
+      ],
+      "properties": {
+        "error_code": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "retry_after_s": {
+          "type": "integer"
+        }
+      }
+    }
+  },
+  "shared_tools": [
+    {
+      "name": "list_accounts",
+      "description": "List the connected messaging accounts.",
+      "input": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": "{accounts: WireAccount[]}"
+    },
+    {
+      "name": "send_message",
+      "description": "Send one message to one recipient.",
+      "input": {
+        "type": "object",
+        "required": [
+          "to"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "to": {
+            "type": "object",
+            "description": "One recipient object; fields per channel."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "media_url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://"
+          },
+          "reply_to": {
+            "type": "string",
+            "description": "Message id to quote."
+          },
+          "media_path": {
+            "type": "string",
+            "local_only": true,
+            "description": "Absolute path to a local file."
+          }
+        }
+      },
+      "output": "{message_id, status: \"queued\"|\"sent\"}"
+    },
+    {
+      "name": "get_message",
+      "description": "Get one message by id.",
+      "input": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": "WireMessage"
+    },
+    {
+      "name": "list_messages",
+      "description": "List messages, newest first.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string",
+            "description": "Cursor from next_cursor."
+          },
+          "chat_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": "{messages: WireMessage[] newest first, next_cursor}"
+    },
+    {
+      "name": "wait_for_messages",
+      "description": "Long poll for new inbound messages. Without a cursor it starts from now.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "timeout_s": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 55,
+            "default": 25
+          },
+          "chat_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": "{messages: WireMessage[] in arrival order, cursor}"
+    },
+    {
+      "name": "get_usage",
+      "description": "Today's sends and caps.",
+      "input": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": "{plan, day, sends, sends_cap, new_contacts, new_contacts_cap, ramp_day?, contract_version}"
+    },
+    {
+      "name": "list_chats",
+      "description": "List chats, most recent first.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "user",
+              "group",
+              "channel"
+            ]
+          }
+        }
+      },
+      "output": "{chats: [{chat_id, name, type, unread_count, last_message_at}]}"
+    },
+    {
+      "name": "search_messages",
+      "description": "Full text search over stored messages.",
+      "input": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "chat_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        }
+      },
+      "output": "{messages: WireMessage[]}"
+    },
+    {
+      "name": "mark_read",
+      "description": "Mark a chat as read.",
+      "input": {
+        "type": "object",
+        "required": [
+          "chat_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": "{marked: true}"
+    }
+  ],
+  "channels": {
+    "whatsapp_web": {
+      "server": "whatzmcp",
+      "recipient": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "E.164 phone number."
+          },
+          "contact_id": {
+            "type": "string",
+            "description": "A chat id from list_chats or a message; groups included."
+          }
+        },
+        "minProperties": 1,
+        "maxProperties": 1
+      },
+      "tools": [
+        {
+          "name": "connect_whatsapp",
+          "description": "Start linking a WhatsApp account by QR code or pairing code.",
+          "input": {
+            "type": "object",
+            "properties": {
+              "phone_number": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "qr",
+                  "code"
+                ]
+              }
+            }
+          },
+          "output": "{account_id, status, qr_png_base64?, pairing_code?}"
+        },
+        {
+          "name": "get_whatsapp_qr",
+          "description": "Get the current pairing QR code as an image.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "image content + {expires_in_s}"
+        },
+        {
+          "name": "get_whatsapp_status",
+          "description": "Get the WhatsApp account status.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "WireAccount"
+        },
+        {
+          "name": "disconnect_whatsapp",
+          "description": "Unlink the WhatsApp account.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "{disconnected: true}"
+        }
+      ]
+    },
+    "telegram": {
+      "server": "telemcp",
+      "recipient": {
+        "type": "object",
+        "description": "Exactly one of these fields.",
+        "properties": {
+          "telegram_user_id": {
+            "type": [
+              "string",
+              "integer"
+            ],
+            "description": "Numeric Telegram user id of a user this account has seen."
+          },
+          "telegram_username": {
+            "type": "string",
+            "description": "Public username, with or without @, or a t.me link."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone number of someone in this account's Telegram contacts (user accounts only)."
+          },
+          "contact_id": {
+            "type": "string",
+            "description": "Any chat id from list_chats or a message (private chats, groups, channels)."
+          }
+        },
+        "minProperties": 1,
+        "maxProperties": 1
+      },
+      "tools": [
+        {
+          "name": "connect_telegram",
+          "description": "Start logging in a Telegram user account. Telegram sends a code to your Telegram app or by SMS; pass it to submit_telegram_code.",
+          "input": {
+            "type": "object",
+            "required": [
+              "phone"
+            ],
+            "properties": {
+              "phone": {
+                "type": "string",
+                "description": "Your phone number in international format, for example +31612345678."
+              }
+            }
+          },
+          "output": "{account_id, status: \"code_required\"|\"connected\"}"
+        },
+        {
+          "name": "submit_telegram_code",
+          "description": "Submit the login code Telegram sent.",
+          "input": {
+            "type": "object",
+            "required": [
+              "code"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              }
+            }
+          },
+          "output": "{account_id, status: \"connected\"|\"password_required\", hint?}"
+        },
+        {
+          "name": "submit_telegram_password",
+          "description": "Submit the two step verification password, when submit_telegram_code returned password_required.",
+          "input": {
+            "type": "object",
+            "required": [
+              "password"
+            ],
+            "properties": {
+              "password": {
+                "type": "string"
+              }
+            }
+          },
+          "output": "{account_id, status: \"connected\"}"
+        },
+        {
+          "name": "get_telegram_status",
+          "description": "The Telegram account: connection status, identifier and today's limits.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "WireAccount"
+        },
+        {
+          "name": "disconnect_telegram",
+          "description": "Log out of Telegram and delete the saved session.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "{disconnected: true}"
+        },
+        {
+          "name": "list_groups",
+          "description": "List groups and supergroups. Same as list_chats with type group.",
+          "input": {
+            "type": "object",
+            "properties": {
+              "account_id": {
+                "type": "string"
+              },
+              "query": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "default": 50
+              }
+            }
+          },
+          "output": "{chats: [{chat_id, name, type, unread_count, last_message_at}]}"
+        },
+        {
+          "name": "list_channels",
+          "description": "List broadcast channels. Same as list_chats with type channel.",
+          "input": {
+            "type": "object",
+            "properties": {
+              "account_id": {
+                "type": "string"
+              },
+              "query": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "default": 50
+              }
+            }
+          },
+          "output": "{chats: [{chat_id, name, type, unread_count, last_message_at}]}"
+        }
+      ],
+      "error_codes": {
+        "invalid_input": "Local only: an input field is missing or malformed.",
+        "telegram_error": "Local only: any other Telegram error, named in error."
+      },
+      "notes": [
+        "rate_limited covers Telegram FLOOD_WAIT (retry_after_s is the wait) and PEER_FLOOD (sends to new contacts stop until local midnight).",
+        "not_available_for_bots is returned in bot mode for calls Telegram does not allow bots to make.",
+        "Self-hosted servers add bot mode through the CLI or TELEMCP_BOT_TOKEN, with no extra tool.",
+        "Message ids are <chat_id>:<telegram message id>."
+      ]
+    },
+    "linkedin": {
+      "server": "linksmcp",
+      "recipient": {
+        "type": "object",
+        "properties": {
+          "linkedin_username": {
+            "type": "string",
+            "description": "Public id from the profile URL."
+          },
+          "profile_url": {
+            "type": "string",
+            "description": "https://www.linkedin.com/in/..."
+          },
+          "contact_id": {
+            "type": "string",
+            "description": "A chat id from list_chats or a message."
+          }
+        },
+        "minProperties": 1,
+        "maxProperties": 1
+      },
+      "tools": [
+        {
+          "name": "connect_linkedin",
+          "description": "Sign in with the li_at cookie of your own LinkedIn session.",
+          "input": {
+            "type": "object",
+            "required": [
+              "li_at"
+            ],
+            "properties": {
+              "li_at": {
+                "type": "string"
+              },
+              "jsessionid": {
+                "type": "string",
+                "description": "Optional; fetched when absent."
+              }
+            }
+          },
+          "output": "WireAccount"
+        },
+        {
+          "name": "get_linkedin_status",
+          "description": "Get the LinkedIn account status.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "WireAccount"
+        },
+        {
+          "name": "disconnect_linkedin",
+          "description": "Forget the stored cookie. LinkedIn itself is not signed out.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "{disconnected: true}"
+        },
+        {
+          "name": "get_my_profile",
+          "description": "Read your own profile.",
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": "{linkedin_username, profile_url, name, headline, location, about, experience[], education[]}"
+        },
+        {
+          "name": "get_person_profile",
+          "description": "Read one profile. Counts as a profile view.",
+          "input": {
+            "type": "object",
+            "properties": {
+              "linkedin_username": {
+                "type": "string",
+                "description": "Public id from the profile URL."
+              },
+              "profile_url": {
+                "type": "string",
+                "description": "https://www.linkedin.com/in/..."
+              }
+            }
+          },
+          "output": "{linkedin_username, profile_url, name, headline, location, about, experience[], education[], connection_degree}"
+        },
+        {
+          "name": "search_people",
+          "description": "Find people by keywords. Counts as a search.",
+          "input": {
+            "type": "object",
+            "required": [
+              "keywords"
+            ],
+            "properties": {
+              "keywords": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string"
+              },
+              "current_company": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25,
+                "default": 10
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0
+              }
+            }
+          },
+          "output": "{people: [{linkedin_username, profile_url, name, headline, location}], next_start?}"
+        },
+        {
+          "name": "connect_with_person",
+          "description": "Send a connection request, with an optional note without links.",
+          "input": {
+            "type": "object",
+            "properties": {
+              "linkedin_username": {
+                "type": "string",
+                "description": "Public id from the profile URL."
+              },
+              "profile_url": {
+                "type": "string",
+                "description": "https://www.linkedin.com/in/..."
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 300
+              }
+            }
+          },
+          "output": "{status: \"sent\"|\"pending\"|\"already_connected\", invitation_id?}"
+        },
+        {
+          "name": "list_invitations",
+          "description": "List sent or received invitations.",
+          "input": {
+            "type": "object",
+            "required": [
+              "direction"
+            ],
+            "properties": {
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "sent",
+                  "received"
+                ]
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 20
+              }
+            }
+          },
+          "output": "{invitations: [{id, direction, linkedin_username, name, sent_at, note?}]}"
+        },
+        {
+          "name": "accept_invitation",
+          "description": "Accept a received invitation. Counts as an accept.",
+          "input": {
+            "type": "object",
+            "required": [
+              "invitation_id"
+            ],
+            "properties": {
+              "invitation_id": {
+                "type": "string"
+              }
+            }
+          },
+          "output": "{accepted: true}"
+        }
+      ]
+    }
+  },
+  "error_codes": {
+    "no_connected_account": "Not paired, logged out, or the connection is down.",
+    "account_suspended": "The platform refused the session (WhatsApp 403, Telegram ban). Sending is stopped.",
+    "invalid_recipient": "The recipient is malformed, a list, or not on the platform.",
+    "contact_not_found": "No chat with that id is known.",
+    "needs_inbound_first": "The recipient must write first.",
+    "daily_send_cap": "Today's message cap is reached. retry_after_s points to the next local midnight on self-hosted.",
+    "new_contact_cap": "Today's new contact cap is reached. retry_after_s points to the next local midnight on self-hosted.",
+    "rate_limited": "Too soon; wait retry_after_s.",
+    "media_unavailable": "The media file or URL cannot be used.",
+    "not_available_for_bots": "Not available in bot mode.",
+    "code_required": "A login code is needed.",
+    "password_required": "A two step password is needed.",
+    "invalid_code": "The login code or password is wrong.",
+    "message_not_found": "No message with that id is known.",
+    "send_failed": "The platform rejected the send.",
+    "session_expired": "The LinkedIn cookie no longer signs in. Sign in again with connect_linkedin.",
+    "security_challenge": "LinkedIn asked for a security check. Writes are paused for 48 hours; finish the check in a browser.",
+    "outside_working_hours": "Outside the configured working hours. retry_after_s points to the next window start.",
+    "link_not_allowed": "A link in a connection note, or in a message to a person who has not written back in this thread. The text is refused, not edited.",
+    "daily_invite_cap": "Today's connection request cap is reached. retry_after_s points to the next local midnight.",
+    "daily_read_cap": "Today's profile view or search cap is reached. retry_after_s points to the next local midnight.",
+    "needs_connection_first": "A new LinkedIn thread can only be opened with a first degree connection."
+  }
+}
