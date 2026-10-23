@@ -1069,6 +1069,7 @@
     "daily_invite_cap": "Today's connection request (or accept) cap is reached. retry_after_s points to the next local midnight.",
     "daily_read_cap": "Today's profile view or search cap is reached. retry_after_s points to the next local midnight.",
     "needs_connection_first": "A new LinkedIn thread can only be opened with a first degree connection.",
+    "linkedin_unavailable": "Hosted only: the LinkedIn engine could not answer (a read timed out or the connection could not be prepared); retry in a minute.",
     "account_not_found": "account_id is not one of your accounts.",
     "invalid_request": "A field has the wrong type or value.",
     "invalid_text": "text is missing or longer than 4096 characters.",
