@@ -552,7 +552,7 @@
               }
             }
           },
-          "output": "{success: true, phone_number, status: \"not_initialized\"|\"qr_pending\"|\"connecting\"|\"connected\"|\"open\"|\"disconnected\" (self-hosted adds \"restricted\"), has_qr, qr_expires_at, last_activity, message_count, proxy, live, limits? (self-hosted)}. A refusal is {success: false, error_code: <HTTP status>, error}."
+          "output": "{success: true, phone_number, status: \"not_initialized\"|\"qr_pending\"|\"connecting\"|\"connected\"|\"open\"|\"disconnected\" (self-hosted adds \"restricted\"), has_qr, qr_expires_at, last_activity, message_count, live, limits? (self-hosted)}. A refusal is {success: false, error_code: <HTTP status>, error}."
         },
         {
           "name": "disconnect_whatsapp",

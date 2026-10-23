@@ -349,7 +349,6 @@ describe('account tools', () => {
       qr_expires_at: null,
       last_activity: new Date(1000_000).toISOString(),
       message_count: 1,
-      proxy: null,
       live: true,
       limits: { sends_today: 0, sends_cap: 50, new_contacts_today: 0, new_contacts_cap: 0, ramp_day: 1 },
     });

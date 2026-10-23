@@ -464,7 +464,6 @@ export function buildTools(ctx: ToolContext): ToolDef[] {
           qr_expires_at: qr ? new Date(Date.now() + qr.expiresInS * 1000).toISOString() : null,
           last_activity: stats.lastTs !== null ? new Date(stats.lastTs * 1000).toISOString() : null,
           message_count: stats.count,
-          proxy: null,
           live: st === 'connected',
           limits: account().limits,
         };
