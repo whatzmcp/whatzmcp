@@ -113,10 +113,14 @@
             },
             "linkedin_username": {
               "type": "string",
-              "description": "Public id from the profile URL."
+              "description": "Self-hosted: the public id from the profile URL."
             },
-            "profile_url": {
-              "type": "string"
+            "linkedin_url": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The person's LinkedIn profile URL (LinkedIn accounts)."
             }
           }
         },
@@ -765,18 +769,20 @@
       "server": "linksmcp",
       "recipient": {
         "type": "object",
+        "description": "Exactly one of these fields.",
         "properties": {
-          "linkedin_username": {
+          "linkedin_url": {
             "type": "string",
-            "description": "Public id from the profile URL."
-          },
-          "profile_url": {
-            "type": "string",
-            "description": "https://www.linkedin.com/in/..."
+            "description": "The person's LinkedIn profile URL (hosted name)."
           },
           "contact_id": {
             "type": "string",
             "description": "A chat id from list_chats or a message."
+          },
+          "linkedin_username": {
+            "type": "string",
+            "local_only": true,
+            "description": "Self-hosted shortcut: the public id from the profile URL."
           }
         },
         "minProperties": 1,
@@ -785,41 +791,120 @@
       "tools": [
         {
           "name": "connect_linkedin",
-          "description": "Sign in with the li_at cookie of your own LinkedIn session.",
+          "description": "Connect your own LinkedIn account from the cookies of a browser where you are signed in: export the cookies for linkedin.com as JSON (a cookie export extension does this) and pass them as cookie_jar, with the two-letter country the account is normally used in. Hosted: the sign-in runs in the background, poll get_linkedin_status (code_required means submit_linkedin_code). Self-hosted: the cookies are checked at once and the answer is connected or failed; li_at alone is accepted as a shortcut.",
           "input": {
             "type": "object",
             "required": [
-              "li_at"
+              "cookie_jar",
+              "country"
             ],
             "properties": {
+              "cookie_jar": {
+                "description": "The cookies of a signed-in LinkedIn browser session, as the JSON a cookie export extension produces (an array of {name, value, domain, ...}), or that JSON as a string.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                ]
+              },
+              "country": {
+                "type": "string",
+                "description": "Two-letter country code of where this LinkedIn account is normally used. Hosted: the dedicated IP is allocated there. Self-hosted: accepted and stored, nothing else."
+              },
+              "city": {
+                "type": "string",
+                "description": "Optional city, to place the IP closer to where the account is used (hosted)."
+              },
+              "country_confirmation": {
+                "type": "string",
+                "enum": [
+                  "kept",
+                  "switched"
+                ],
+                "description": "Only after a 409 country_confirmation_required (hosted)."
+              },
+              "browser_timezone": {
+                "type": "string",
+                "description": "The IANA timezone of the browser the cookies came from, when known."
+              },
+              "account_id": {
+                "type": "string",
+                "description": "Reconnect this account instead of adding one."
+              },
               "li_at": {
-                "type": "string"
+                "type": "string",
+                "local_only": true,
+                "description": "Self-hosted shortcut: the li_at cookie value instead of cookie_jar."
               },
               "jsessionid": {
                 "type": "string",
-                "description": "Optional; fetched when absent."
+                "local_only": true,
+                "description": "Self-hosted: the JSESSIONID cookie value; fetched when absent."
               }
             }
           },
-          "output": "WireAccount"
+          "output": "WireLinkedinStatus {account_id, status: \"connecting\"|\"code_required\"|\"connected\"|\"failed\"|\"disconnected\", step, error, profile_name, profile_url}. A refusal is a WireError (string error_code), as on the hosted API."
         },
         {
           "name": "get_linkedin_status",
-          "description": "Get the LinkedIn account status.",
+          "description": "The sign-in progress of a LinkedIn account: connecting, code_required (submit_linkedin_code), connected, failed with an error you can show the user, or disconnected. Self-hosted adds limits (today's counts and caps) and hint.",
           "input": {
             "type": "object",
-            "properties": {}
+            "required": [
+              "account_id"
+            ],
+            "properties": {
+              "account_id": {
+                "type": "string",
+                "description": "The account id from connect_linkedin or list_accounts (\"local\" on self-hosted servers)."
+              }
+            }
           },
-          "output": "WireAccount"
+          "output": "WireLinkedinStatus {account_id, status: \"connecting\"|\"code_required\"|\"connected\"|\"failed\"|\"disconnected\", step, error, profile_name, profile_url}. A refusal is a WireError (string error_code), as on the hosted API. Self-hosted adds limits and hint."
+        },
+        {
+          "name": "submit_linkedin_code",
+          "description": "When get_linkedin_status says code_required, LinkedIn sent a verification code to the account's email or authenticator app; submit it here and keep polling the status. Self-hosted servers never ask for a code and answer invalid_request.",
+          "input": {
+            "type": "object",
+            "required": [
+              "account_id",
+              "code"
+            ],
+            "properties": {
+              "account_id": {
+                "type": "string",
+                "description": "The account id from connect_linkedin or list_accounts (\"local\" on self-hosted servers)."
+              },
+              "code": {
+                "type": "string"
+              }
+            }
+          },
+          "output": "WireLinkedinStatus {account_id, status: \"connecting\"|\"code_required\"|\"connected\"|\"failed\"|\"disconnected\", step, error, profile_name, profile_url}. A refusal is a WireError (string error_code), as on the hosted API."
         },
         {
           "name": "disconnect_linkedin",
-          "description": "Forget the stored cookie. LinkedIn itself is not signed out.",
+          "description": "Signs the account out on this side and removes it. The LinkedIn account itself is untouched. Self-hosted: deletes the stored cookies; a running 48 hour pause stays in force.",
           "input": {
             "type": "object",
-            "properties": {}
+            "required": [
+              "account_id"
+            ],
+            "properties": {
+              "account_id": {
+                "type": "string",
+                "description": "The account id from connect_linkedin or list_accounts (\"local\" on self-hosted servers)."
+              }
+            }
           },
-          "output": "{disconnected: true}"
+          "output": "{disconnected: true, account_id}"
         },
         {
           "name": "get_my_profile",
@@ -828,7 +913,7 @@
             "type": "object",
             "properties": {}
           },
-          "output": "{linkedin_username, profile_url, name, headline, location, about, experience[], education[]}"
+          "output": "{linkedin_username, linkedin_url, name, headline, location, about, experience[], education[]}"
         },
         {
           "name": "get_person_profile",
@@ -836,17 +921,18 @@
           "input": {
             "type": "object",
             "properties": {
+              "linkedin_url": {
+                "type": "string",
+                "description": "The person's LinkedIn profile URL, https://www.linkedin.com/in/..."
+              },
               "linkedin_username": {
                 "type": "string",
-                "description": "Public id from the profile URL."
-              },
-              "profile_url": {
-                "type": "string",
-                "description": "https://www.linkedin.com/in/..."
+                "local_only": true,
+                "description": "Self-hosted shortcut: the public id from the profile URL."
               }
             }
           },
-          "output": "{linkedin_username, profile_url, name, headline, location, about, experience[], education[], connection_degree}"
+          "output": "{linkedin_username, linkedin_url, name, headline, location, about, experience[], education[], connection_degree}"
         },
         {
           "name": "search_people",
@@ -858,13 +944,17 @@
             ],
             "properties": {
               "keywords": {
-                "type": "string"
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 200
               },
               "location": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               "current_company": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               "limit": {
                 "type": "integer",
@@ -879,7 +969,7 @@
               }
             }
           },
-          "output": "{people: [{linkedin_username, profile_url, name, headline, location}], next_start?}"
+          "output": "{people: [{linkedin_username, linkedin_url, name, headline, location}], next_start?}"
         },
         {
           "name": "connect_with_person",
@@ -887,13 +977,14 @@
           "input": {
             "type": "object",
             "properties": {
+              "linkedin_url": {
+                "type": "string",
+                "description": "The person's LinkedIn profile URL, https://www.linkedin.com/in/..."
+              },
               "linkedin_username": {
                 "type": "string",
-                "description": "Public id from the profile URL."
-              },
-              "profile_url": {
-                "type": "string",
-                "description": "https://www.linkedin.com/in/..."
+                "local_only": true,
+                "description": "Self-hosted shortcut: the public id from the profile URL."
               },
               "note": {
                 "type": "string",
@@ -927,7 +1018,7 @@
               }
             }
           },
-          "output": "{invitations: [{id, direction, linkedin_username, name, sent_at, note?}]}"
+          "output": "{invitations: [{id, direction, linkedin_username, linkedin_url, name, sent_at, note?}]}"
         },
         {
           "name": "accept_invitation",
@@ -945,6 +1036,13 @@
           },
           "output": "{accepted: true}"
         }
+      ],
+      "notes": [
+        "The four lifecycle tools are the live hosted LinkedIn lane (DMWire openapi tag dmwire-linkedin, 2026-10-18); their refusals are WireErrors with string codes, not the {success: false, error_code: <HTTP status>} shape of the WhatsApp and Telegram lifecycle tools.",
+        "Self-hosted servers have one account with id \"local\"; account_id on any tool is checked against it and any other value is account_not_found.",
+        "Self-hosted connect_linkedin accepts li_at (local only) instead of cookie_jar; country is accepted and not used. There is no verification code step: the cookies either sign in or fail at once.",
+        "Message ids are LinkedIn event ids; chat ids are LinkedIn conversation ids. Media is not supported in linksmcp 0.x (media_unavailable).",
+        "A wrong TYPE in an input is refused by the MCP schema validation of the server; ranges and semantics (limit, query length, timeout_s, cursor) answer with the invalid_* codes."
       ]
     }
   },
@@ -964,11 +1062,11 @@
     "invalid_code": "The login code or password is wrong.",
     "message_not_found": "No message with that id is known.",
     "send_failed": "The platform rejected the send.",
-    "session_expired": "The LinkedIn cookie no longer signs in. Sign in again with connect_linkedin.",
-    "security_challenge": "LinkedIn asked for a security check. Writes are paused for 48 hours; finish the check in a browser.",
+    "session_expired": "The LinkedIn cookies no longer sign in. Connect again with fresh cookies.",
+    "security_challenge": "LinkedIn asked for a security check. Self-hosted: writes are paused for 48 hours; finish the check in a browser. Hosted: get_linkedin_status says code_required or failed.",
     "outside_working_hours": "Outside the configured working hours. retry_after_s points to the next window start.",
     "link_not_allowed": "A link in a connection note, or in a message to a person who has not written back in this thread. The text is refused, not edited.",
-    "daily_invite_cap": "Today's connection request cap is reached. retry_after_s points to the next local midnight.",
+    "daily_invite_cap": "Today's connection request (or accept) cap is reached. retry_after_s points to the next local midnight.",
     "daily_read_cap": "Today's profile view or search cap is reached. retry_after_s points to the next local midnight.",
     "needs_connection_first": "A new LinkedIn thread can only be opened with a first degree connection.",
     "account_not_found": "account_id is not one of your accounts.",
