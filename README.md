@@ -5,7 +5,7 @@ whatzmcp is an open source MCP server that connects your own WhatsApp account to
 Don't want to run it yourself? A hosted version is coming at whatzmcp.com.
 
 ```bash
-npx whatzmcp login
+npx -y github:whatzmcp/whatzmcp login
 ```
 
 Scan the QR code with WhatsApp on your phone, add whatzmcp to your MCP client, and ask your assistant things like "What did Sarah send me about the invoice?" or "Reply to Tom that I am running ten minutes late."
@@ -17,10 +17,10 @@ You need Node.js 20 or newer and a phone with WhatsApp.
 1. Link your account:
 
    ```bash
-   npx whatzmcp login
+   npx -y github:whatzmcp/whatzmcp login
    ```
 
-   On your phone open WhatsApp, go to Settings, Linked devices, Link a device, and scan the QR code in the terminal. Prefer a code? Run `npx whatzmcp login --pair-code +14155550123` with your own number, then choose "Link with phone number instead" on the phone and type the 8 character code.
+   On your phone open WhatsApp, go to Settings, Linked devices, Link a device, and scan the QR code in the terminal. Prefer a code? Run `npx -y github:whatzmcp/whatzmcp login --pair-code +14155550123` with your own number, then choose "Link with phone number instead" on the phone and type the 8 character code.
 
 2. Add the server to your MCP client (config blocks below) and restart the client.
 
@@ -39,7 +39,7 @@ Edit `claude_desktop_config.json` (Settings, Developer, Edit Config):
   "mcpServers": {
     "whatzmcp": {
       "command": "npx",
-      "args": ["-y", "whatzmcp"]
+      "args": ["-y", "github:whatzmcp/whatzmcp"]
     }
   }
 }
@@ -48,13 +48,13 @@ Edit `claude_desktop_config.json` (Settings, Developer, Edit Config):
 ### Claude Code
 
 ```bash
-claude mcp add whatzmcp -- npx -y whatzmcp
+claude mcp add whatzmcp -- npx -y github:whatzmcp/whatzmcp
 ```
 
 ### OpenClaw
 
 ```bash
-openclaw mcp add whatzmcp --command npx --arg -y --arg whatzmcp
+openclaw mcp add whatzmcp --command npx --arg -y --arg github:whatzmcp/whatzmcp
 openclaw mcp doctor whatzmcp --probe
 ```
 
@@ -66,7 +66,7 @@ Or in `~/.openclaw/openclaw.json`:
     "servers": {
       "whatzmcp": {
         "command": "npx",
-        "args": ["-y", "whatzmcp"]
+        "args": ["-y", "github:whatzmcp/whatzmcp"]
       }
     }
   }
@@ -82,7 +82,7 @@ Add to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):
   "mcpServers": {
     "whatzmcp": {
       "command": "npx",
-      "args": ["-y", "whatzmcp"]
+      "args": ["-y", "github:whatzmcp/whatzmcp"]
     }
   }
 }
@@ -93,7 +93,7 @@ Add to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):
 ```json
 {
   "command": "npx",
-  "args": ["-y", "whatzmcp"],
+  "args": ["-y", "github:whatzmcp/whatzmcp"],
   "env": { "WHATZMCP_HOME": "/path/to/data" }
 }
 ```
@@ -101,7 +101,7 @@ Add to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):
 ### Local HTTP
 
 ```bash
-npx whatzmcp serve --http --port 8787 --token "$(openssl rand -hex 16)"
+npx -y github:whatzmcp/whatzmcp serve --http --port 8787 --token "$(openssl rand -hex 16)"
 ```
 
 The endpoint is `http://127.0.0.1:8787/mcp` (Streamable HTTP). It only listens on 127.0.0.1. Send the token as `Authorization: Bearer <token>`.
@@ -166,7 +166,7 @@ whatzmcp also:
 * refuses instead of queueing: when a limit is reached, nothing is sent and the assistant gets a clear reason,
 * stops all sending if WhatsApp refuses the session, and never retries a send after that.
 
-Check where you are with `npx whatzmcp limits`. To change the caps, edit `~/.whatzmcp/config.json` (changes apply without a restart):
+Check where you are with `npx -y github:whatzmcp/whatzmcp limits`. To change the caps, edit `~/.whatzmcp/config.json` (changes apply without a restart):
 
 ```json
 {
@@ -209,7 +209,7 @@ Run one whatzmcp per data directory. Two processes with the same session would k
 
 ### Is there a WhatsApp MCP server?
 
-Yes. whatzmcp is an open source WhatsApp MCP server. Install it with `npx whatzmcp login`, add it to Claude Desktop, Claude Code, Cursor, OpenClaw or any MCP client, and your assistant can read, search and send WhatsApp messages from your own account. Don't want to run it yourself? A hosted version is coming at whatzmcp.com.
+Yes. whatzmcp is an open source WhatsApp MCP server. Install it with `npx -y github:whatzmcp/whatzmcp login`, add it to Claude Desktop, Claude Code, Cursor, OpenClaw or any MCP client, and your assistant can read, search and send WhatsApp messages from your own account. Don't want to run it yourself? A hosted version is coming at whatzmcp.com.
 
 ### Will WhatsApp ban my number?
 
@@ -233,7 +233,7 @@ Yes. Groups show up in `list_chats` with `type: "group"`, their messages are sto
 
 ### How do I unlink it?
 
-Run `npx whatzmcp logout`, or ask your assistant to call `disconnect_whatsapp`. You can also remove it on your phone under Settings, Linked devices. Delete `~/.whatzmcp` to remove the stored messages too.
+Run `npx -y github:whatzmcp/whatzmcp logout`, or ask your assistant to call `disconnect_whatsapp`. You can also remove it on your phone under Settings, Linked devices. Delete `~/.whatzmcp` to remove the stored messages too.
 
 ### Can I run it in Docker?
 
